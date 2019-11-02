@@ -1,0 +1,15 @@
+ACTION=="add|change", SUBSYSTEM=="scsi_host", KERNEL=="host*", ATTR{link_power_management_policy}="min_power"
+
+# Built-in USB drive is not rotational, but kernel thinks it is.
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd?", ENV{ID_MODEL_ID}=="b155", ENV{ID_VENDOR_ID}=="1005", ATTR{queue/rotational}="0"
+
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd?", KERNELS=="4:0:0:0", SYMLINK+="qnap/hdd1"
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd?", KERNELS=="3:0:0:0", SYMLINK+="qnap/hdd2"
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd?", KERNELS=="2:0:0:0", SYMLINK+="qnap/hdd3"
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd?", KERNELS=="8:0:0:0", SYMLINK+="qnap/hdd4"
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd?", KERNELS=="7:0:0:0", SYMLINK+="qnap/hdd5"
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd?", KERNELS=="6:0:0:0", SYMLINK+="qnap/hdd6"
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd?", KERNELS=="1-4", SYMLINK+="qnap/builtin_usb"
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd?", KERNELS=="2-1.3", SYMLINK+="qnap/front_usb"
+
+ACTION=="add|change", KERNEL=="f71882fg.656", ATTR{pwm1_auto_point4_pwm}="100",ATTR{pwm1_auto_point4_temp}="35000", ATTR{pwm1_auto_point5_pwm}="115", ATTR{pwm1_auto_channels_temp}="2", ATTR{pwm2_auto_point4_pwm}="100", ATTR{pwm2_auto_point4_temp}="35000", ATTR{pwm2_auto_point5_pwm}="115", ATTR{pwm2_auto_channels_temp}="1", ATTR{pwm3_enable}="1", ATTR{pwm3}="0"
