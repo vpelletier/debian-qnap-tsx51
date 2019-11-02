@@ -1,0 +1,155 @@
+#!/bin/sh
+MDEVENT="$1"
+MDDEVICE="$2"
+PHYSDEVICE="$3"
+
+LED_PATH="/sys/class/leds"
+LED_DISK_SUFFIX=":red:sata"
+STATUS_PATH="/run/$(basename "$0")"
+test -d "$STATUS_PATH" || mkdir "$STATUS_PATH"
+
+update_led()
+{
+    LED="${LED_PATH}/$1"
+    STATUS="${STATUS_PATH}/${1}:"
+    test -d "$LED" || return 1
+    if   [ -e "${STATUS}locate" ]; then
+        TRIGGER="timer"
+        BRIGHTNESS=1
+        DELAY_ON=125
+        DELAY_OFF=125
+    elif [ -e "${STATUS}error" ]; then
+        TRIGGER="none"
+        BRIGHTNESS=1
+    elif [ -e "${STATUS}prefail" ]; then
+        # XXX: standard says "2 blinks at 4 Hz, 1 pause at 2 Hz" but led
+        # triggers cannot reproduce this, so instead go for 1Hz,
+        # 25% duty cycle.
+        TRIGGER="timer"
+        BRIGHTNESS=1
+        DELAY_ON=250
+        DELAY_OFF=750
+    elif [ -e "${STATUS}rebuild" ]; then
+        TRIGGER="timer"
+        BRIGHTNESS=1
+        DELAY_ON=500
+        DELAY_OFF=500
+    else
+        # All fine, turn led off
+        TRIGGER="none"
+        BRIGHTNESS=0
+    fi
+
+    echo "$TRIGGER" > "${LED}/trigger"
+    echo "$BRIGHTNESS" > "${LED}/brightness"
+    case "$TRIGGER" in
+        timer)
+            echo "$DELAY_ON" > "${LED}/delay_on"
+            echo "$DELAY_OFF" > "${LED}/delay_off"
+            ;;
+    esac
+}
+
+set_led()
+{
+    STATUS="${STATUS_PATH}/${1}:"
+    case "$2" in
+        fail)
+            touch "${STATUS}error"
+            ;;
+        recovering)
+            touch "${STATUS}rebuild"
+            rm    "${STATUS}error"
+            ;;
+        recovered)
+            rm    "${STATUS}rebuild"
+            ;;
+        prefail)
+            touch "${STATUS}prefail"
+            ;;
+        start_locate)
+            touch "${STATUS}locate"
+            ;;
+        stop_locate)
+            rm    "${STATUS}locate"
+            ;;
+        forget)
+            rm    "${STATUS}locate" \
+                  "${STATUS}error" \
+                  "${STATUS}prefail" \
+                  "${STATUS}rebuild"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+disk_led()
+{
+    DISK="$1"
+    shift
+    test -n "$DISK" || return 1
+    SYSPATH="/sys$(udevadm info --query=path "$DISK")"
+    test -e "$SYSPATH/partition" && SYSPATH="$(dirname "$SYSPATH")"
+    for SYMLINK in $(udevadm info --query=symlink "$SYSPATH"); do
+        if echo "$SYMLINK" | grep -q "^qnap/"; then
+            set_led "$(echo "$SYMLINK" | sed "s@^qnap/@@")$LED_DISK_SUFFIX" "$@"
+            return $?
+        fi
+    done
+    return 1
+}
+
+array_led()
+{
+    ARRAY="$1"
+    shift
+    for DEVICE in "/sys$(udevadm info --query=path "$ARRAY")/"slaves/*; do
+        disk_led "$DEVICE" "$@"
+    done
+}
+
+global_red_led()
+{
+    set_led "qnap_tsx51:red:status" "$@"
+}
+
+global_green_led()
+{
+    set_led "qnap_tsx51:green:status" "$@"
+}
+
+case "$MDEVENT" in
+    DegradedArray | SparesMissing)
+        array_led "$MDDEVICE" prefail
+        ;;
+    Fail | FailSpare)
+        disk_led "$PHYSDEVICE" fail
+        ;;
+    TestMessage)
+        if [ $# -eq 3 ]; then
+            trap "disk_led \"$PHYSDEVICE\" stop_locate" 0
+            disk_led "$PHYSDEVICE" start_locate
+        else
+            trap "array_led \"$MDDEVICE\" stop_locate" 0
+            array_led "$MDDEVICE" start_locate
+        fi
+        sleep 5
+        ;;
+    RebuildStarted | Rebuild??)
+        array_led "$MDDEVICE" recovering
+        ;;
+    RebuildFinished)
+        array_led "$MDDEVICE" recovered
+        ;;
+# Does not work, as we will not be able to list corresponding disks
+#    DeviceDisappeared)
+#        array_led "$MDDEVICE" forget
+#        ;;
+
+esac
+
+for LED in "$LED_PATH/"hdd*"$LED_DISK_SUFFIX"; do
+    update_led "$(basename "$LED")"
+done

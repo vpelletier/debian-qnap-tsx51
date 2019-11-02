@@ -1,0 +1,10 @@
+[Unit]
+Description=Reconfigure QNAP leds after resume
+After=suspend.target sleep.target hybrid-sleep.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/mdadm2leds refresh
+
+[Install]
+WantedBy=suspend.target sleep.target hybrid-sleep.target
